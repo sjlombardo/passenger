@@ -24,10 +24,60 @@
  */
 
 #include <string>
+#include <map>
 
 namespace Passenger {
 
 using namespace std;
+
+/**
+ * Mapping of common HTTP status codes and their status messages.
+ * Stolen from Rack, which stole it from Mongrel.
+ */
+static pair<string,string> httpStatusCodes[] = {
+  pair<string,string>("100","Continue"),
+  pair<string,string>("101","Switching Protocols"),
+  pair<string,string>("200","OK"),
+  pair<string,string>("201","Created"),
+  pair<string,string>("202","Accepted"),
+  pair<string,string>("203","Non-Authoritative Information"),
+  pair<string,string>("204","No Content"),
+  pair<string,string>("205","Reset Content"),
+  pair<string,string>("206","Partial Content"),
+  pair<string,string>("300","Multiple Choices"),
+  pair<string,string>("301","Moved Permanently"),
+  pair<string,string>("302","Found"),
+  pair<string,string>("303","See Other"),
+  pair<string,string>("304","Not Modified"),
+  pair<string,string>("305","Use Proxy"),
+  pair<string,string>("307","Temporary Redirect"),
+  pair<string,string>("400","Bad Request"),
+  pair<string,string>("401","Unauthorized"),
+  pair<string,string>("402","Payment Required"),
+  pair<string,string>("403","Forbidden"),
+  pair<string,string>("404","Not Found"),
+  pair<string,string>("405","Method Not Allowed"),
+  pair<string,string>("406","Not Acceptable"),
+  pair<string,string>("407","Proxy Authentication Required"),
+  pair<string,string>("408","Request Timeout"),
+  pair<string,string>("409","Conflict"),
+  pair<string,string>("410","Gone"),
+  pair<string,string>("411","Length Required"),
+  pair<string,string>("412","Precondition Failed"),
+  pair<string,string>("413","Request Entity Too Large"),
+  pair<string,string>("414","Request-URI Too Large"),
+  pair<string,string>("415","Unsupported Media Type"),
+  pair<string,string>("416","Requested Range Not Satisfiable"),
+  pair<string,string>("417","Expectation Failed"),
+  pair<string,string>("500","Internal Server Error"),
+  pair<string,string>("501","Not Implemented"),
+  pair<string,string>("502","Bad Gateway"),
+  pair<string,string>("503","Service Unavailable"),
+  pair<string,string>("504","Gateway Timeout"),
+  pair<string,string>("505","HTTP Version Not Supported")
+};
+
+static map<string,string> httpStatusCodesMap(httpStatusCodes, httpStatusCodes + sizeof(httpStatusCodes) / sizeof(httpStatusCodes[0]));
 
 /**
  * Utility class for extracting the HTTP status value from an HTTP response.
@@ -82,6 +132,22 @@ private:
 		if (start_pos != string::npos) {
 			// Status line has been found. Extract it.
 			statusLine = buffer.substr(start_pos, newline_pos - start_pos);
+
+			// Pull out the status code from the status header line and look it up from the 
+			// status code map. When a match is found construct a partial HTTP/1.1 compliant
+			// status line in this format. Note that the "HTTP-Version SP" prefix will be
+			// appended by the caller. Format and example:
+			// statusLine = Status-Code SP Reason-Phrase CRLF
+			// examples: "200 OK\r\n", "304 Not Modified\r\n"
+			map<string,string>::iterator iter = httpStatusCodesMap.find(statusLine.substr(0, 3));
+			if( iter != httpStatusCodesMap.end() ) {
+				// when a match is found overwrite the statusLine and concat the code with 
+				// the message and the trailing CRLF
+				statusLine = iter->first; // Status-Code
+				statusLine.append(" ");   // SP
+				statusLine.append(iter->second);     // Reason-Phrase
+				statusLine.append("\r\n");           // CRLF
+			}
 			return true;
 		} else {
 			// Status line is not found. Do not change default
